@@ -1,0 +1,9 @@
+[Interface]
+PrivateKey = {% for result in peers_privatekeys.results %}{% if result.item.client_name == item.client_name %}{{ result.content | b64decode }}{% endif %}{% endfor %}
+Address = {{ item.client_ip }}/32
+
+[Peer]
+PublicKey = {{ public_key.results[0].content | b64decode }}
+AllowedIPs = {{ item.allowed_ips }}
+Endpoint = {{ ansible_fqdn }}:{{ wireguard.server_port }}
+

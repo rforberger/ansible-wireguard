@@ -1,0 +1,15 @@
+[Interface]
+Address = {{ wireguard.ips.internal }}/{{ wireguard.ips.subnet_prefix }}
+SaveConfig = false
+ListenPort = {{ wireguard.server_port }}
+PrivateKey = {{ private_key.content | b64decode }}
+
+{% for peer in wireguard.peers %}
+[Peer]
+PublicKey = {% for result in peers_publickeys.results %}{% if result.item.client_name == peer.client_name %}{{ result.content | b64decode }}{% endif %}{% endfor %}
+AllowedIPs = {{ peer.client_ip }}/32
+PersistentKeepalive = 25
+
+{% endfor %}
+
+

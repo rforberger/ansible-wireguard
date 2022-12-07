@@ -1,0 +1,16 @@
+---
+
+
+- name: Restart tunnel
+  ansible.builtin.service:
+    name: wg-quick@wg0
+    state: restarted
+
+# Workaround: use wg0 statically as loop_var cannot be used here
+- name: Restart peer tunnel
+  ansible.builtin.service:
+    name: "wg-quick@wg0"
+    state: restarted
+
+
+

@@ -1,0 +1,144 @@
+---
+
+- name: server - install wireguard-tools
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - wireguard-tools
+
+- name: server - Create /etc/wireguard directory
+  ansible.builtin.file:
+    path: "/etc/wireguard"
+    state: directory
+    mode: 0700
+    owner: root
+    group: root
+
+- name: server - Create private key
+  ansible.builtin.shell: wg genkey > privatekey 2>/dev/null && chmod 0400 privatekey
+  args:
+    creates: "/etc/wireguard/privatekey"
+    chdir: "/etc/wireguard"
+
+- name: server - Create public key
+  ansible.builtin.shell: wg pubkey < privatekey > publickey
+  args:
+    creates: "/etc/wireguard/publickey"
+    chdir: "/etc/wireguard"
+
+################################################
+
+- name: peers - Create wireguard directory
+  ansible.builtin.file:
+    name: "/etc/wireguard"
+    state: directory
+    mode: 0700
+    owner: root
+    group: root
+  delegate_to: "{{ item.client_name }}"
+  loop: "{{ wireguard.peers }}"
+  when: item.auto_config == True
+
+
+- name: peers - Install pkgs
+  ansible.builtin.apt:
+    name: "wireguard-tools"
+    state: present
+  delegate_to: "{{ item.client_name }}"
+  loop: "{{ wireguard.peers }}"
+  when: item.auto_config == True
+
+- name: peers - Generate private key for peers
+  ansible.builtin.shell:
+    cmd: "wg genkey > privatekey-{{ item.client_name }} && chmod 0400 privatekey-{{ item.client_name }}"
+    chdir: "/etc/wireguard"
+    creates: "privatekey-{{ item.client_name }}"
+  loop: "{{ wireguard.peers }}"
+
+- name: peers - Generate public key for peers
+  ansible.builtin.shell:
+    cmd: "cat privatekey-{{ item.client_name }} | wg pubkey > publickey-{{ item.client_name }}"
+    chdir: "/etc/wireguard"
+    creates: "publickey-{{ item.client_name }}"
+  loop: "{{ wireguard.peers }}"
+
+#################################################
+
+- name: server - Fetch privatekey
+  ansible.builtin.slurp:
+    src: "/etc/wireguard/privatekey"
+  register: private_key
+
+- name: server - Fetch publickey
+  ansible.builtin.slurp:
+    src: "/etc/wireguard/publickey"
+  register: public_key
+  loop: "{{ wireguard.peers }}"
+
+- name: peers - Fetch privatekeys
+  ansible.builtin.slurp:
+    src: "/etc/wireguard/privatekey-{{ item.client_name }}"
+  register: peers_privatekeys
+  loop: "{{ wireguard.peers }}"
+
+- name: peers - Fetch publickeys
+  ansible.builtin.slurp:
+    src: "/etc/wireguard/publickey-{{ item.client_name }}"
+  register: peers_publickeys
+  loop: "{{ wireguard.peers }}"
+
+- name: server - Write wireguard tunnel configuration
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/{{ wireguard.interface_name }}.conf
+    mode: 0600
+    owner: root
+    group: root
+  notify:
+    - Restart tunnel
+
+- name: server - Enable tunnel
+  ansible.builtin.service:
+    name: "wg-quick@{{ wireguard.interface_name }}"
+    enabled: yes
+    state: started
+
+- name: peers - Write peer config
+  ansible.builtin.template:
+    src: "client.conf.j2"
+    dest: "/etc/wireguard/{{ item.interface_name }}.conf"
+    mode: 0600
+    owner: root
+    group: root
+  delegate_to: "{{ item.client_name }}"
+  loop: "{{ wireguard.peers }}"
+  notify:
+    - "Restart peer tunnel"
+  when: item.auto_config == True
+
+- name: peers - Write peer config
+  ansible.builtin.template:
+    src: "client.conf.j2"
+    dest: "/etc/wireguard/{{ item.client_name }}.conf"
+    mode: 0600
+    owner: root
+    group: root
+  loop: "{{ wireguard.peers }}"
+  notify:
+    - "Restart peer tunnel"
+
+- name: peers - Enable wireguard tunnel service
+  ansible.builtin.service:
+    name: "wg-quick@{{ item.interface_name }}"
+    enabled: yes
+    state: started
+  loop: "{{ wireguard.peers }}"
+  delegate_to: "{{ item.client_name }}"
+  when: item.auto_config == True
+
+########################################################
+
+
+
+
