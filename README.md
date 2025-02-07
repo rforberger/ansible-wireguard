@@ -1,4 +1,4 @@
-# A wireguard ansible role with optional full automatic configuration of peers
+# A wireguard ansible role with optional fully automatic configuration of peers
 
 Example data:
 
